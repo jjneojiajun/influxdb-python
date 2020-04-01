@@ -19,8 +19,8 @@ import requests.exceptions
 from six.moves import xrange
 from six.moves.urllib.parse import urlparse
 
-from influxdb.line_protocol import make_lines, quote_ident, quote_literal
-from influxdb.resultset import ResultSet
+from influxdb_relay.line_protocol import make_lines, quote_ident, quote_literal
+from influxdb_relay.resultset import ResultSet
 from .exceptions import InfluxDBClientError
 from .exceptions import InfluxDBServerError
 
@@ -285,6 +285,7 @@ class InfluxDBClient(object):
                     verify=self._verify_ssl,
                     timeout=self._timeout
                 )
+
                 break
             except (requests.exceptions.ConnectionError,
                     requests.exceptions.HTTPError,
@@ -637,14 +638,43 @@ class InfluxDBClient(object):
         """
         return list(self.query("SHOW DATABASES").get_points())
 
+    def admin_request(self, data):
+        url = "{0}/admin".format(self._baseurl)
+
+        # Try to send the requests more than once by default 
+        retry = True
+        _try = 0
+        while retry:
+            try:
+                response = self._session.request(
+                    method="POST",
+                    url=url,
+                    data=data
+                )
+                break
+            except (requests.exceptions.ConnectionError, requests.exceptions.HTTPError, requests.exceptions.Timeout):
+                _try += 1
+                if self._retries != 0:
+                    retry = _try < self._retries
+                else:
+                    time.sleep((2 ** _try) * random.random() / 100.0)
+        
+        return response
+
     def create_database(self, dbname):
         """Create a new database in InfluxDB.
 
         :param dbname: the name of the database to create
         :type dbname: str
         """
-        self.query("CREATE DATABASE {0}".format(quote_ident(dbname)),
-                   method="POST")
+        data = {'q': "CREATE DATABASE {0}".format(quote_ident(dbname))}
+
+        response = self.admin_request(data)
+        
+        if response.status_code == 204:
+            return "Database {0} has been created".format(quote_ident(dbname))
+        else:
+            return "Unable to create DB"
 
     def drop_database(self, dbname):
         """Drop a database from InfluxDB.
@@ -652,8 +682,13 @@ class InfluxDBClient(object):
         :param dbname: the name of the database to drop
         :type dbname: str
         """
-        self.query("DROP DATABASE {0}".format(quote_ident(dbname)),
-                   method="POST")
+        data = {'q': "DROP DATABASE {0}".format(quote_ident(dbname))}
+        response = self.admin_request(data)
+
+        if response.status_code == 204:
+            return "Database {0} has been dropped".format(quote_ident(dbname))
+        else:
+            return "Unable to drop {0}".format(quote_ident(dbname))
 
     def get_list_measurements(self):
         """Get the list of measurements in InfluxDB.
@@ -679,8 +714,13 @@ class InfluxDBClient(object):
         :param measurement: the name of the measurement to drop
         :type measurement: str
         """
-        self.query("DROP MEASUREMENT {0}".format(quote_ident(measurement)),
-                   method="POST")
+        data = {'q': "DROP MEASUREMENT {0}".format(quote_ident(measurement))}
+        response = self.admin_request(data)
+
+        if response.status_code == 204:
+            return "Measurement {0} has been dropped".format(quote_ident(measurement))
+        else:
+            return "Unable to drop {0} measurement".format(quote_ident(measurement))
 
     def create_retention_policy(self, name, duration, replication,
                                 database=None,
@@ -722,7 +762,13 @@ class InfluxDBClient(object):
         if default is True:
             query_string += " DEFAULT"
 
-        self.query(query_string, method="POST")
+        data = {'q': query_string}
+        response = self.admin_request(data)
+
+        if response.status_code == 204:
+            return "RETENTION POLICY {0} ON {1} CREATED".format(quote_ident(name), quote_ident(database or self._database))
+        else:
+            return "UNABLE TO CREATE RETENTION POLICY REQUESTED"
 
     def alter_retention_policy(self, name, database=None,
                                duration=None, replication=None,
@@ -761,7 +807,7 @@ class InfluxDBClient(object):
         query_string = (
             "ALTER RETENTION POLICY {0} ON {1}"
         ).format(quote_ident(name),
-                 quote_ident(database or self._database), shard_duration)
+                 quote_ident(database or self._database))
         if duration:
             query_string += " DURATION {0}".format(duration)
         if shard_duration:
@@ -771,7 +817,14 @@ class InfluxDBClient(object):
         if default is True:
             query_string += " DEFAULT"
 
-        self.query(query_string, method="POST")
+        data = {'q': query_string}
+        response = self.admin_request(data)
+
+        if response.status_code == 204:
+            return "ALTERED RETENTION POLICY {0} ON {1}".format(quote_ident(name),
+                 quote_ident(database or self._database))
+        else:
+            return "UNABLE TO ALTER RETENTION POLICY"
 
     def drop_retention_policy(self, name, database=None):
         """Drop an existing retention policy for a database.
@@ -785,7 +838,14 @@ class InfluxDBClient(object):
         query_string = (
             "DROP RETENTION POLICY {0} ON {1}"
         ).format(quote_ident(name), quote_ident(database or self._database))
-        self.query(query_string, method="POST")
+        
+        data = {'q': query_string}
+        response = self.admin_request(data)
+
+        if response.status_code == 204:
+            return "DROPPED RETENTION POLICY {0} ON {1}".format(quote_ident(name), quote_ident(database or self._database))
+        else:
+            return "UNABLE TO DROP RETENTION POLICY"
 
     def get_list_retention_policies(self, database=None):
         """Get the list of retention policies for a database.
@@ -851,7 +911,13 @@ class InfluxDBClient(object):
             quote_ident(username), quote_literal(password))
         if admin:
             text += ' WITH ALL PRIVILEGES'
-        self.query(text, method="POST")
+        data = {'q': text}
+        response = self.admin_request(data)
+        
+        if response.status_code == 204:
+            return "{0} is CREATED".format(quote_ident(username))
+        else:
+            return "UNABLE TO CREATE USER"
 
     def drop_user(self, username):
         """Drop a user from InfluxDB.
@@ -859,8 +925,14 @@ class InfluxDBClient(object):
         :param username: the username to drop
         :type username: str
         """
-        text = "DROP USER {0}".format(quote_ident(username), method="POST")
-        self.query(text, method="POST")
+        text = "DROP USER {0}".format(quote_ident(username))
+        data = {"q": text}
+        response = self.admin_request(data)
+
+        if response.status_code == 204:
+            return "{0} is DROPPED".format(quote_ident(username))
+        else:
+            return "UNABLE TO DROP USER"
 
     def set_user_password(self, username, password):
         """Change the password of an existing user.
@@ -872,7 +944,13 @@ class InfluxDBClient(object):
         """
         text = "SET PASSWORD FOR {0} = {1}".format(
             quote_ident(username), quote_literal(password))
-        self.query(text)
+        data = {"q": text}
+        response = self.admin_request(data)
+
+        if response.status_code == 204:
+            return "{0} PASSWORD SET".format(quote_ident(username))
+        else:
+            return "UNABLE TO SET PASSWORD"
 
     def delete_series(self, database=None, measurement=None, tags=None):
         """Delete series from a database.
@@ -898,7 +976,16 @@ class InfluxDBClient(object):
             tag_eq_list = ["{0}={1}".format(quote_ident(k), quote_literal(v))
                            for k, v in tags.items()]
             query_str += ' WHERE ' + ' AND '.join(tag_eq_list)
-        self.query(query_str, database=database, method="POST")
+
+        data = {"q": query_str}
+        response = self.admin_request(data)
+
+        if response.status_code == 204:
+            return "SERIES DROPPED SUCCESSFULLY"
+        else:
+            return "UNABLE TO DROP SERIES"
+
+
 
     def grant_admin_privileges(self, username):
         """Grant cluster administration privileges to a user.
@@ -910,7 +997,13 @@ class InfluxDBClient(object):
             and manage users.
         """
         text = "GRANT ALL PRIVILEGES TO {0}".format(quote_ident(username))
-        self.query(text, method="POST")
+        data = {"q": text}
+        response = self.admin_request(data)
+
+        if response.status_code == 204:
+            return "GRANT ADMIN PRIVILEGES TO {0}".format(quote_ident(username))
+        else:
+            return "UNABLE TO GRANT ADMIN PRIVILEGES TO {0}".format(quote_ident(username))
 
     def revoke_admin_privileges(self, username):
         """Revoke cluster administration privileges from a user.
@@ -922,7 +1015,13 @@ class InfluxDBClient(object):
             and manage users.
         """
         text = "REVOKE ALL PRIVILEGES FROM {0}".format(quote_ident(username))
-        self.query(text, method="POST")
+        data = {"q": text}
+        response = self.admin_request(data)
+
+        if response.status_code == 204:
+            return "REVOKE ALL PRIVILEGES FROM {0}".format(quote_ident(username))
+        else:
+            return "UNABLE TO REVOKE ALL PRIVILEGES FROM {0}".format(quote_ident(username))
 
     def grant_privilege(self, privilege, database, username):
         """Grant a privilege on a database to a user.
@@ -938,7 +1037,15 @@ class InfluxDBClient(object):
         text = "GRANT {0} ON {1} TO {2}".format(privilege,
                                                 quote_ident(database),
                                                 quote_ident(username))
-        self.query(text, method="POST")
+        data = {"q": text}
+        response = self.admin_request(data)
+        
+        if response.status_code == 204:
+            return "GRANT {0} ON {1} TO {2} SUCCESSFUL".format(privilege,
+                                                quote_ident(database),
+                                                quote_ident(username))
+        else:
+            return "UNABLE TO GRANT PRIVILEGE"
 
     def revoke_privilege(self, privilege, database, username):
         """Revoke a privilege on a database from a user.
@@ -954,7 +1061,17 @@ class InfluxDBClient(object):
         text = "REVOKE {0} ON {1} FROM {2}".format(privilege,
                                                    quote_ident(database),
                                                    quote_ident(username))
-        self.query(text, method="POST")
+        data = {"q": text}
+        response = self.admin_request(data)
+
+        if response.status_code == 204:
+            return "REVOKE {0} ON {1} FROM {2} SUCCESSFULLY".format(
+                privilege,
+                quote_ident(database),
+                quote_ident(username)
+            )
+        else:
+            return "UNABLE TO REVOKE PRIVILEGE"
 
     def get_list_privileges(self, username):
         """Get the list of all privileges granted to given user.
@@ -1054,7 +1171,13 @@ class InfluxDBClient(object):
             "CREATE CONTINUOUS QUERY {0} ON {1}{2} BEGIN {3} END"
         ).format(quote_ident(name), quote_ident(database or self._database),
                  ' RESAMPLE ' + resample_opts if resample_opts else '', select)
-        self.query(query_string)
+        data = {"q": query_string}
+        response = self.admin_request(data)
+
+        if response.status_code == 204:
+            return "CREATE CONTINUOUS QUERY SUCCESSFULLY"
+        else:
+            return "UNABLE TO CREATE CONTINUOUS QUERY"
 
     def drop_continuous_query(self, name, database=None):
         """Drop an existing continuous query for a database.
@@ -1068,7 +1191,13 @@ class InfluxDBClient(object):
         query_string = (
             "DROP CONTINUOUS QUERY {0} ON {1}"
         ).format(quote_ident(name), quote_ident(database or self._database))
-        self.query(query_string)
+        data = {"q": query_string}
+        response = self.admin_request(data)
+
+        if response.status_code == 204:
+            return "DROPPED CONTINUOUS QUERY SUCCESSFULLY"
+        else:
+            return "UNABLE TO DROP CONTINUOUS QUERY"
 
     def send_packet(self, packet, protocol='json', time_precision=None):
         """Send an UDP packet.

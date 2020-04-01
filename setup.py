@@ -17,7 +17,7 @@ import os
 import re
 
 
-with open(os.path.join(os.path.dirname(__file__), 'influxdb', '__init__.py')) as f:
+with open(os.path.join(os.path.dirname(__file__), 'influxdb_relay', '__init__.py')) as f:
     version = re.search("__version__ = '([^']+)'", f.read()).group(1)
 
 with open('requirements.txt', 'r') as f:
@@ -31,11 +31,11 @@ with open('README.rst', 'r') as f:
 
 
 setup(
-    name='influxdb',
+    name='influxdb_relay',
     version=version,
-    description="InfluxDB client",
+    description="InfluxDB With Relay client",
     long_description=readme,
-    url='https://github.com/influxdb/influxdb-python',
+    url='https://github.com/jjneojiajun/influxdb-python',
     license='MIT License',
     packages=find_packages(exclude=['tests']),
     test_suite='tests',

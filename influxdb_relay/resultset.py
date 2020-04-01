@@ -8,7 +8,7 @@ from __future__ import unicode_literals
 
 import warnings
 
-from influxdb.exceptions import InfluxDBClientError
+from influxdb_relay.exceptions import InfluxDBClientError
 
 _sentinel = object()
 
