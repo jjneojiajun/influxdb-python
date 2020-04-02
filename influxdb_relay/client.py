@@ -661,7 +661,15 @@ class InfluxDBClient(object):
         
         return response
 
-    def create_database(self, dbname):
+     def create_database(self, dbname):
+        """Create a new database in InfluxDB.
+        :param dbname: the name of the database to create
+        :type dbname: str
+        """
+        self.query("CREATE DATABASE {0}".format(quote_ident(dbname)),
+                   method="POST")
+
+    def relay_create_database(self, dbname):
         """Create a new database in InfluxDB.
 
         :param dbname: the name of the database to create
@@ -677,6 +685,14 @@ class InfluxDBClient(object):
             return "Unable to create DB"
 
     def drop_database(self, dbname):
+        """Drop a database from InfluxDB.
+        :param dbname: the name of the database to drop
+        :type dbname: str
+        """
+        self.query("DROP DATABASE {0}".format(quote_ident(dbname)),
+                   method="POST")
+
+    def relay_drop_database(self, dbname):
         """Drop a database from InfluxDB.
 
         :param dbname: the name of the database to drop
@@ -710,6 +726,14 @@ class InfluxDBClient(object):
 
     def drop_measurement(self, measurement):
         """Drop a measurement from InfluxDB.
+        :param measurement: the name of the measurement to drop
+        :type measurement: str
+        """
+        self.query("DROP MEASUREMENT {0}".format(quote_ident(measurement)),
+                   method="POST")
+
+    def relay_drop_measurement(self, measurement):
+        """Drop a measurement from InfluxDB.
 
         :param measurement: the name of the measurement to drop
         :type measurement: str
@@ -723,6 +747,47 @@ class InfluxDBClient(object):
             return "Unable to drop {0} measurement".format(quote_ident(measurement))
 
     def create_retention_policy(self, name, duration, replication,
+                                database=None,
+                                default=False, shard_duration="0s"):
+        """Create a retention policy for a database.
+        :param name: the name of the new retention policy
+        :type name: str
+        :param duration: the duration of the new retention policy.
+            Durations such as 1h, 90m, 12h, 7d, and 4w, are all supported
+            and mean 1 hour, 90 minutes, 12 hours, 7 day, and 4 weeks,
+            respectively. For infinite retention - meaning the data will
+            never be deleted - use 'INF' for duration.
+            The minimum retention period is 1 hour.
+        :type duration: str
+        :param replication: the replication of the retention policy
+        :type replication: str
+        :param database: the database for which the retention policy is
+            created. Defaults to current client's database
+        :type database: str
+        :param default: whether or not to set the policy as default
+        :type default: bool
+        :param shard_duration: the shard duration of the retention policy.
+            Durations such as 1h, 90m, 12h, 7d, and 4w, are all supported and
+            mean 1 hour, 90 minutes, 12 hours, 7 day, and 4 weeks,
+            respectively. Infinite retention is not supported. As a workaround,
+            specify a "1000w" duration to achieve an extremely long shard group
+            duration. Defaults to "0s", which is interpreted by the database
+            to mean the default value given the duration.
+            The minimum shard group duration is 1 hour.
+        :type shard_duration: str
+        """
+        query_string = \
+            "CREATE RETENTION POLICY {0} ON {1} " \
+            "DURATION {2} REPLICATION {3} SHARD DURATION {4}".format(
+                quote_ident(name), quote_ident(database or self._database),
+                duration, replication, shard_duration)
+
+        if default is True:
+            query_string += " DEFAULT"
+
+        self.query(query_string, method="POST")
+
+    def relay_create_retention_policy(self, name, duration, replication,
                                 database=None,
                                 default=False, shard_duration="0s"):
         """Create a retention policy for a database.
@@ -771,6 +836,53 @@ class InfluxDBClient(object):
             return "UNABLE TO CREATE RETENTION POLICY REQUESTED"
 
     def alter_retention_policy(self, name, database=None,
+                               duration=None, replication=None,
+                               default=None, shard_duration=None):
+        """Modify an existing retention policy for a database.
+        :param name: the name of the retention policy to modify
+        :type name: str
+        :param database: the database for which the retention policy is
+            modified. Defaults to current client's database
+        :type database: str
+        :param duration: the new duration of the existing retention policy.
+            Durations such as 1h, 90m, 12h, 7d, and 4w, are all supported
+            and mean 1 hour, 90 minutes, 12 hours, 7 day, and 4 weeks,
+            respectively. For infinite retention, meaning the data will
+            never be deleted, use 'INF' for duration.
+            The minimum retention period is 1 hour.
+        :type duration: str
+        :param replication: the new replication of the existing
+            retention policy
+        :type replication: int
+        :param default: whether or not to set the modified policy as default
+        :type default: bool
+        :param shard_duration: the shard duration of the retention policy.
+            Durations such as 1h, 90m, 12h, 7d, and 4w, are all supported and
+            mean 1 hour, 90 minutes, 12 hours, 7 day, and 4 weeks,
+            respectively. Infinite retention is not supported. As a workaround,
+            specify a "1000w" duration to achieve an extremely long shard group
+            duration.
+            The minimum shard group duration is 1 hour.
+        :type shard_duration: str
+        .. note:: at least one of duration, replication, or default flag
+            should be set. Otherwise the operation will fail.
+        """
+        query_string = (
+            "ALTER RETENTION POLICY {0} ON {1}"
+        ).format(quote_ident(name),
+                 quote_ident(database or self._database), shard_duration)
+        if duration:
+            query_string += " DURATION {0}".format(duration)
+        if shard_duration:
+            query_string += " SHARD DURATION {0}".format(shard_duration)
+        if replication:
+            query_string += " REPLICATION {0}".format(replication)
+        if default is True:
+            query_string += " DEFAULT"
+
+        self.query(query_string, method="POST")
+
+    def relay_alter_retention_policy(self, name, database=None,
                                duration=None, replication=None,
                                default=None, shard_duration=None):
         """Modify an existing retention policy for a database.
@@ -827,6 +939,19 @@ class InfluxDBClient(object):
             return "UNABLE TO ALTER RETENTION POLICY"
 
     def drop_retention_policy(self, name, database=None):
+        """Drop an existing retention policy for a database.
+        :param name: the name of the retention policy to drop
+        :type name: str
+        :param database: the database for which the retention policy is
+            dropped. Defaults to current client's database
+        :type database: str
+        """
+        query_string = (
+            "DROP RETENTION POLICY {0} ON {1}"
+        ).format(quote_ident(name), quote_ident(database or self._database))
+        self.query(query_string, method="POST")
+
+    def relay_drop_retention_policy(self, name, database=None):
         """Drop an existing retention policy for a database.
 
         :param name: the name of the retention policy to drop
@@ -898,6 +1023,22 @@ class InfluxDBClient(object):
 
     def create_user(self, username, password, admin=False):
         """Create a new user in InfluxDB.
+        :param username: the new username to create
+        :type username: str
+        :param password: the password for the new user
+        :type password: str
+        :param admin: whether the user should have cluster administration
+            privileges or not
+        :type admin: boolean
+        """
+        text = "CREATE USER {0} WITH PASSWORD {1}".format(
+            quote_ident(username), quote_literal(password))
+        if admin:
+            text += ' WITH ALL PRIVILEGES'
+        self.query(text, method="POST")
+
+    def relay_create_user(self, username, password, admin=False):
+        """Create a new user in InfluxDB.
 
         :param username: the new username to create
         :type username: str
@@ -921,6 +1062,14 @@ class InfluxDBClient(object):
 
     def drop_user(self, username):
         """Drop a user from InfluxDB.
+        :param username: the username to drop
+        :type username: str
+        """
+        text = "DROP USER {0}".format(quote_ident(username), method="POST")
+        self.query(text, method="POST")
+
+    def relay_drop_user(self, username):
+        """Drop a user from InfluxDB.
 
         :param username: the username to drop
         :type username: str
@@ -935,6 +1084,17 @@ class InfluxDBClient(object):
             return "UNABLE TO DROP USER"
 
     def set_user_password(self, username, password):
+        """Change the password of an existing user.
+        :param username: the username who's password is being changed
+        :type username: str
+        :param password: the new password for the user
+        :type password: str
+        """
+        text = "SET PASSWORD FOR {0} = {1}".format(
+            quote_ident(username), quote_literal(password))
+        self.query(text)
+
+    def relay_set_user_password(self, username, password):
         """Change the password of an existing user.
 
         :param username: the username who's password is being changed
@@ -953,6 +1113,30 @@ class InfluxDBClient(object):
             return "UNABLE TO SET PASSWORD"
 
     def delete_series(self, database=None, measurement=None, tags=None):
+        """Delete series from a database.
+        Series must be filtered by either measurement and tags.
+        This method cannot be used to delete all series, use
+        `drop_database` instead.
+        :param database: the database from which the series should be
+            deleted, defaults to client's current database
+        :type database: str
+        :param measurement: Delete all series from a measurement
+        :type measurement: str
+        :param tags: Delete all series that match given tags
+        :type tags: dict
+        """
+        database = database or self._database
+        query_str = 'DROP SERIES'
+        if measurement:
+            query_str += ' FROM {0}'.format(quote_ident(measurement))
+
+        if tags:
+            tag_eq_list = ["{0}={1}".format(quote_ident(k), quote_literal(v))
+                           for k, v in tags.items()]
+            query_str += ' WHERE ' + ' AND '.join(tag_eq_list)
+        self.query(query_str, database=database, method="POST")
+
+    def relay_delete_series(self, database=None, measurement=None, tags=None):
         """Delete series from a database.
 
         Series must be filtered by either measurement and tags.
@@ -985,9 +1169,17 @@ class InfluxDBClient(object):
         else:
             return "UNABLE TO DROP SERIES"
 
-
-
     def grant_admin_privileges(self, username):
+        """Grant cluster administration privileges to a user.
+        :param username: the username to grant privileges to
+        :type username: str
+        .. note:: Only a cluster administrator can create/drop databases
+            and manage users.
+        """
+        text = "GRANT ALL PRIVILEGES TO {0}".format(quote_ident(username))
+        self.query(text, method="POST")
+
+    def relay_grant_admin_privileges(self, username):
         """Grant cluster administration privileges to a user.
 
         :param username: the username to grant privileges to
@@ -1007,6 +1199,16 @@ class InfluxDBClient(object):
 
     def revoke_admin_privileges(self, username):
         """Revoke cluster administration privileges from a user.
+        :param username: the username to revoke privileges from
+        :type username: str
+        .. note:: Only a cluster administrator can create/ drop databases
+            and manage users.
+        """
+        text = "REVOKE ALL PRIVILEGES FROM {0}".format(quote_ident(username))
+        self.query(text, method="POST")
+
+    def relay_revoke_admin_privileges(self, username):
+        """Revoke cluster administration privileges from a user.
 
         :param username: the username to revoke privileges from
         :type username: str
@@ -1024,6 +1226,21 @@ class InfluxDBClient(object):
             return "UNABLE TO REVOKE ALL PRIVILEGES FROM {0}".format(quote_ident(username))
 
     def grant_privilege(self, privilege, database, username):
+        """Grant a privilege on a database to a user.
+        :param privilege: the privilege to grant, one of 'read', 'write'
+            or 'all'. The string is case-insensitive
+        :type privilege: str
+        :param database: the database to grant the privilege on
+        :type database: str
+        :param username: the username to grant the privilege to
+        :type username: str
+        """
+        text = "GRANT {0} ON {1} TO {2}".format(privilege,
+                                                quote_ident(database),
+                                                quote_ident(username))
+        self.query(text, method="POST")
+
+    def relay_grant_privilege(self, privilege, database, username):
         """Grant a privilege on a database to a user.
 
         :param privilege: the privilege to grant, one of 'read', 'write'
@@ -1048,6 +1265,21 @@ class InfluxDBClient(object):
             return "UNABLE TO GRANT PRIVILEGE"
 
     def revoke_privilege(self, privilege, database, username):
+        """Revoke a privilege on a database from a user.
+        :param privilege: the privilege to revoke, one of 'read', 'write'
+            or 'all'. The string is case-insensitive
+        :type privilege: str
+        :param database: the database to revoke the privilege on
+        :type database: str
+        :param username: the username to revoke the privilege from
+        :type username: str
+        """
+        text = "REVOKE {0} ON {1} FROM {2}".format(privilege,
+                                                   quote_ident(database),
+                                                   quote_ident(username))
+        self.query(text, method="POST")
+
+    def relay_revoke_privilege(self, privilege, database, username):
         """Revoke a privilege on a database from a user.
 
         :param privilege: the privilege to revoke, one of 'read', 'write'
@@ -1130,6 +1362,48 @@ class InfluxDBClient(object):
     def create_continuous_query(self, name, select, database=None,
                                 resample_opts=None):
         r"""Create a continuous query for a database.
+        :param name: the name of continuous query to create
+        :type name: str
+        :param select: select statement for the continuous query
+        :type select: str
+        :param database: the database for which the continuous query is
+            created. Defaults to current client's database
+        :type database: str
+        :param resample_opts: resample options
+        :type resample_opts: str
+        :Example:
+        ::
+            >> select_clause = 'SELECT mean("value") INTO "cpu_mean" ' \
+            ...                 'FROM "cpu" GROUP BY time(1m)'
+            >> client.create_continuous_query(
+            ...     'cpu_mean', select_clause, 'db_name', 'EVERY 10s FOR 2m'
+            ... )
+            >> client.get_list_continuous_queries()
+            [
+                {
+                    'db_name': [
+                        {
+                            'name': 'cpu_mean',
+                            'query': 'CREATE CONTINUOUS QUERY "cpu_mean" '
+                                    'ON "db_name" '
+                                    'RESAMPLE EVERY 10s FOR 2m '
+                                    'BEGIN SELECT mean("value") '
+                                    'INTO "cpu_mean" FROM "cpu" '
+                                    'GROUP BY time(1m) END'
+                        }
+                    ]
+                }
+            ]
+        """
+        query_string = (
+            "CREATE CONTINUOUS QUERY {0} ON {1}{2} BEGIN {3} END"
+        ).format(quote_ident(name), quote_ident(database or self._database),
+                 ' RESAMPLE ' + resample_opts if resample_opts else '', select)
+        self.query(query_string)
+
+    def relay_create_continuous_query(self, name, select, database=None,
+                                resample_opts=None):
+        r"""Create a continuous query for a database.
 
         :param name: the name of continuous query to create
         :type name: str
@@ -1179,7 +1453,34 @@ class InfluxDBClient(object):
         else:
             return "UNABLE TO CREATE CONTINUOUS QUERY"
 
+        def drop_continuous_query(self, name, database=None):
+        """Drop an existing continuous query for a database.
+        :param name: the name of continuous query to drop
+        :type name: str
+        :param database: the database for which the continuous query is
+            dropped. Defaults to current client's database
+        :type database: str
+        """
+        query_string = (
+            "DROP CONTINUOUS QUERY {0} ON {1}"
+        ).format(quote_ident(name), quote_ident(database or self._database))
+        self.query(query_string)
+
     def drop_continuous_query(self, name, database=None):
+        """Drop an existing continuous query for a database.
+        :param name: the name of continuous query to drop
+        :type name: str
+        :param database: the database for which the continuous query is
+            dropped. Defaults to current client's database
+        :type database: str
+        """
+        query_string = (
+            "DROP CONTINUOUS QUERY {0} ON {1}"
+        ).format(quote_ident(name), quote_ident(database or self._database))
+        self.query(query_string)
+
+
+    def relay_drop_continuous_query(self, name, database=None):
         """Drop an existing continuous query for a database.
 
         :param name: the name of continuous query to drop
