@@ -34,3 +34,22 @@ With this, I edited the library requests to call to the /admin endpoint instead 
 by the influxdata team that created the influxdb-python files in regards to each individual APIs, for the relay calls, simply add relay_create_database for example to create
 the database for the instances that you have set up.
 
+Main functions that have been added for the relay:
+
+1. create_database --> relay_create_database
+2. drop_database --> relay_drop_database
+3. create_users --> relay_create_user
+4. drop_user --> relay_drop_user
+5. drop_measurement --> relay_drop_measurement
+6. create_retention_policy --> relay_create_retention_policy
+7. alter_retention_policy --> relay_alter_retention_policy
+8. drop_retention_policy --> relay_drop_retention_policy
+9. set_user_password --> relay_set_user_password
+10. delete_series --> relay_delete_series
+11. grant_admin_privileges --> relay_grant_admin_privileges
+12. revoke_admin_privileges --> relay_revoke_admin_privileges
+13. grant_privilege --> relay_grant_privilege
+14. revoke_privilege --> relay_revoke_privilege
+15. create_continuous_query --> relay_create_continuous_query
+16. drop_continuous_query --> relay_drop_continuous_query
+
