@@ -661,13 +661,13 @@ class InfluxDBClient(object):
         
         return response
 
-     def create_database(self, dbname):
+    def create_database(self, dbname):
         """Create a new database in InfluxDB.
         :param dbname: the name of the database to create
         :type dbname: str
         """
         self.query("CREATE DATABASE {0}".format(quote_ident(dbname)),
-                   method="POST")
+                    method="POST")
 
     def relay_create_database(self, dbname):
         """Create a new database in InfluxDB.
@@ -868,7 +868,7 @@ class InfluxDBClient(object):
             should be set. Otherwise the operation will fail.
         """
         query_string = (
-            "ALTER RETENTION POLICY {0} ON {1}"
+            "ALTER RETENTION POLICY {0} ON {1} {2}"
         ).format(quote_ident(name),
                  quote_ident(database or self._database), shard_duration)
         if duration:
@@ -1453,19 +1453,6 @@ class InfluxDBClient(object):
         else:
             return "UNABLE TO CREATE CONTINUOUS QUERY"
 
-        def drop_continuous_query(self, name, database=None):
-        """Drop an existing continuous query for a database.
-        :param name: the name of continuous query to drop
-        :type name: str
-        :param database: the database for which the continuous query is
-            dropped. Defaults to current client's database
-        :type database: str
-        """
-        query_string = (
-            "DROP CONTINUOUS QUERY {0} ON {1}"
-        ).format(quote_ident(name), quote_ident(database or self._database))
-        self.query(query_string)
-
     def drop_continuous_query(self, name, database=None):
         """Drop an existing continuous query for a database.
         :param name: the name of continuous query to drop
@@ -1478,7 +1465,6 @@ class InfluxDBClient(object):
             "DROP CONTINUOUS QUERY {0} ON {1}"
         ).format(quote_ident(name), quote_ident(database or self._database))
         self.query(query_string)
-
 
     def relay_drop_continuous_query(self, name, database=None):
         """Drop an existing continuous query for a database.
