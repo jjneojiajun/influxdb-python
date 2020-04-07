@@ -638,8 +638,10 @@ class InfluxDBClient(object):
         """
         return list(self.query("SHOW DATABASES").get_points())
 
-    def admin_request(self, data):
+    def admin_request(self, data, database=None):
         url = "{0}/admin".format(self._baseurl)
+
+        data['db'] = database or self._database
 
         # Try to send the requests more than once by default 
         retry = True
@@ -649,7 +651,7 @@ class InfluxDBClient(object):
                 response = self._session.request(
                     method="POST",
                     url=url,
-                    data=data
+                    data=data,
                 )
                 break
             except (requests.exceptions.ConnectionError, requests.exceptions.HTTPError, requests.exceptions.Timeout):
